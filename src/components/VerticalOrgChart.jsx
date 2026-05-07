@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 function roleColor(name, depth) {
   if (depth === 0) return 'blue';
@@ -18,9 +18,41 @@ function countTotal(node) {
   return node.headcount + (node.children?.reduce((sum, child) => sum + countTotal(child), 0) ?? 0);
 }
 
-function OrgCard({ node, depth, collapsible = false, collapsed = false, onToggle }) {
+function EditableMeta({ node, path, onUpdate }) {
+  const [editing, setEditing] = useState(false);
+  const [draftRole, setDraftRole] = useState(node.role);
+  const [draftSequence, setDraftSequence] = useState(node.sequence);
+
+  const save = () => {
+    onUpdate(path, { role: draftRole, sequence: draftSequence });
+    setEditing(false);
+  };
+
+  if (!editing) {
+    return (
+      <div className="org-card-bottom editable-meta" onDoubleClick={() => setEditing(true)}>
+        <span>{node.role}</span>
+        <small>{node.sequence} · {node.level} · 团队 {node.headcount} 人</small>
+      </div>
+    );
+  }
+
+  return (
+    <div className="org-card-bottom editable-form">
+      <input value={draftRole} onChange={(e) => setDraftRole(e.target.value)} placeholder="职位名称" />
+      <input value={draftSequence} onChange={(e) => setDraftSequence(e.target.value)} placeholder="序列" />
+      <div className="edit-actions">
+        <button className="mini-btn" onClick={() => setEditing(false)}>取消</button>
+        <button className="mini-btn primary" onClick={save}>保存</button>
+      </div>
+    </div>
+  );
+}
+
+function OrgCard({ node, depth, path, collapsed = false, onToggle, onUpdate }) {
   const total = countTotal(node);
   const tone = roleColor(node.name, depth);
+  const hasChildren = !!node.children?.length;
 
   return (
     <div className={`org-card tone-${tone} depth-${depth}`}>
@@ -30,97 +62,147 @@ function OrgCard({ node, depth, collapsible = false, collapsed = false, onToggle
           <div>
             <strong>{node.owner}</strong>
             <p>{node.name}</p>
-            <small>{node.sequence}</small>
+            <small>{node.level}</small>
           </div>
         </div>
         <div className="org-card-actions">
           <button className="card-more-btn">⋯</button>
-          {collapsible && (
-            <button className="org-collapse-btn" onClick={onToggle}>
+          {hasChildren && (
+            <button className="org-collapse-btn" onClick={() => onToggle(path)}>
               {collapsed ? '+' : '−'}
             </button>
           )}
         </div>
       </div>
-      <div className="org-card-bottom">
-        <span>{node.role}</span>
-        <small>{node.level} · 团队 {node.headcount} 人</small>
-      </div>
+      <EditableMeta node={node} path={path} onUpdate={onUpdate} />
       <span className="org-badge floating">{total}</span>
     </div>
   );
 }
 
-function RoleStack({ roles, color }) {
-  const [expanded, setExpanded] = useState(false);
-  const visibleRoles = expanded ? roles : roles.slice(0, 3);
-  const hiddenCount = Math.max(0, roles.length - 3);
+function RoleNode({ node, path, collapsedMap, onToggle, onUpdate }) {
+  const collapsed = collapsedMap[path] ?? false;
+  const hasChildren = !!node.children?.length;
 
   return (
-    <div className={`role-stack tone-${color}`}>
-      <div className="role-stack-label">{roles.reduce((sum, role) => sum + role.headcount, 0)} 人</div>
-      {visibleRoles.map((role) => (
-        <div className="role-stack-item" key={`${role.name}-${role.owner}`}>
-          <div className="role-stack-title">
-            <div className="role-title-left">
-              <span className="role-dot" />
-              <strong>{role.owner}</strong>
-            </div>
-            <button className="card-more-btn subtle">⋯</button>
-          </div>
-          <div className="role-stack-meta role-stack-meta-block">
-            <span>{role.name}</span>
-            <small>{role.sequence} · {role.role}</small>
-          </div>
+    <div className="role-node-wrap">
+      <OrgCard node={node} depth={2} path={path} collapsed={collapsed} onToggle={onToggle} onUpdate={onUpdate} />
+      {!collapsed && hasChildren && (
+        <div className="role-children">
+          {node.children.map((child, index) => (
+            <RoleNode
+              key={`${child.name}-${child.owner}-${index}`}
+              node={child}
+              path={`${path}.children.${index}`}
+              collapsedMap={collapsedMap}
+              onToggle={onToggle}
+              onUpdate={onUpdate}
+            />
+          ))}
         </div>
-      ))}
-      {hiddenCount > 0 && !expanded && (
-        <button className="show-more-btn" onClick={() => setExpanded(true)}>展开其余 {hiddenCount} 个角色组</button>
-      )}
-      {hiddenCount > 0 && expanded && (
-        <button className="show-more-btn" onClick={() => setExpanded(false)}>收起角色组</button>
       )}
     </div>
   );
 }
 
-function ProjectBranch({ project, collapsedMap, onToggle }) {
-  const collapsed = collapsedMap[project.name] ?? false;
-  const hasChildren = project.children && project.children.length > 0;
-  const tone = roleColor(project.name, 1);
+function ProjectBranch({ project, index, collapsedMap, onToggle, onUpdate }) {
+  const path = `children.${index}`;
+  const collapsed = collapsedMap[path] ?? false;
+  const hasChildren = !!project.children?.length;
 
   return (
-    <div className={`project-branch tone-${tone}`}>
+    <div className="project-branch">
       <div className="branch-link vertical" />
-      <OrgCard
-        node={project}
-        depth={1}
-        collapsible={hasChildren}
-        collapsed={collapsed}
-        onToggle={() => onToggle(project.name, !collapsed)}
-      />
+      <OrgCard node={project} depth={1} path={path} collapsed={collapsed} onToggle={onToggle} onUpdate={onUpdate} />
       {!collapsed && hasChildren && (
         <>
           <div className="branch-link vertical short" />
-          <RoleStack roles={project.children} color={tone} />
+          <div className="role-stack clean-stack">
+            {project.children.map((role, roleIndex) => (
+              <RoleNode
+                key={`${role.name}-${role.owner}-${roleIndex}`}
+                node={role}
+                path={`${path}.children.${roleIndex}`}
+                collapsedMap={collapsedMap}
+                onToggle={onToggle}
+                onUpdate={onUpdate}
+              />
+            ))}
+          </div>
         </>
       )}
     </div>
   );
 }
 
-export default function VerticalOrgChart({ data, collapsedMap, onToggle }) {
+export default function VerticalOrgChart({ data, collapsedMap, onToggle, onUpdate, zoom, zoomOrigin, onWheelZoom, pan, onPanChange }) {
+  const rootCollapsed = collapsedMap.root ?? false;
+  const boardRef = useRef(null);
+  const dragRef = useRef({ active: false, startX: 0, startY: 0, baseX: 0, baseY: 0 });
+
+  const handleWheel = (event) => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    const rect = boardRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = ((event.clientX - rect.left) / rect.width) * 100;
+    const y = ((event.clientY - rect.top) / rect.height) * 100;
+    onWheelZoom(event.deltaY, { x, y });
+  };
+
+  const handlePointerDown = (event) => {
+    if (event.target.closest('button, input')) return;
+    dragRef.current = {
+      active: true,
+      startX: event.clientX,
+      startY: event.clientY,
+      baseX: pan.x,
+      baseY: pan.y
+    };
+  };
+
+  const handlePointerMove = (event) => {
+    if (!dragRef.current.active) return;
+    const deltaX = event.clientX - dragRef.current.startX;
+    const deltaY = event.clientY - dragRef.current.startY;
+    onPanChange({ x: dragRef.current.baseX + deltaX, y: dragRef.current.baseY + deltaY });
+  };
+
+  const handlePointerUp = () => {
+    dragRef.current.active = false;
+  };
+
   return (
-    <div className="vertical-org-board">
+    <div
+      ref={boardRef}
+      className="vertical-org-board zoomable pannable"
+      style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: `${zoomOrigin.x}% ${zoomOrigin.y}%` }}
+      onWheel={handleWheel}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerUp}
+    >
       <div className="vertical-org-root">
-        <OrgCard node={data} depth={0} />
+        <OrgCard node={data} depth={0} path="root" collapsed={rootCollapsed} onToggle={onToggle} onUpdate={onUpdate} />
       </div>
-      <div className="root-connector" />
-      <div className="project-grid">
-        {data.children.map((project) => (
-          <ProjectBranch key={project.name} project={project} collapsedMap={collapsedMap} onToggle={onToggle} />
-        ))}
-      </div>
+      {!rootCollapsed && (
+        <>
+          <div className="root-connector" />
+          <div className="project-grid simple-grid">
+            {data.children.map((project, index) => (
+              <ProjectBranch
+                key={project.name}
+                project={project}
+                index={index}
+                collapsedMap={collapsedMap}
+                onToggle={onToggle}
+                onUpdate={onUpdate}
+              />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
