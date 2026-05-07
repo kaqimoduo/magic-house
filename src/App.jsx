@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import OrgNode from './components/OrgNode';
+import VerticalOrgChart from './components/VerticalOrgChart';
 import { orgData, portfolioProjects } from './data/mockData';
 
 function flattenNames(node, result = []) {
@@ -41,7 +41,7 @@ export default function App() {
   };
 
   const expandAll = () => setNodesCollapsed(allNodeNames, false);
-  const collapseAll = () => setNodesCollapsed(allNodeNames, true);
+  const collapseAll = () => setNodesCollapsed(orgData.children.map((item) => item.name), true);
 
   return (
     <div className="page-shell">
@@ -67,17 +67,32 @@ export default function App() {
       <main className="main-content top-layout">
         {activeView === 'org' && (
           <section className="view-panel active">
-            <header className="page-header sheet-header">
+            <header className="page-header sheet-header board-header">
               <div>
                 <p className="eyebrow">Page 01</p>
-                <h2>三层项目组织架构</h2>
-                <p>整体为三层结构：业务负责人 → 项目 → 项目角色，单项目团队规模约 7-10 人。</p>
-              </div>
-              <div className="header-actions">
-                <button className="ghost-btn" onClick={expandAll}>全部展开</button>
-                <button className="ghost-btn" onClick={collapseAll}>全部收起</button>
+                <h2>纵向树状组织架构</h2>
+                <p>按业务负责人、项目、角色组的三层结构纵向展示，贴近组织架构看板风格。</p>
               </div>
             </header>
+
+            <section className="board-toolbar">
+              <div className="toolbar-group">
+                <button className="tool-btn muted">↶ 撤销</button>
+                <button className="tool-btn muted">↷ 重做</button>
+                <button className="tool-btn" onClick={collapseAll}>− 缩小层级</button>
+                <button className="tool-btn">100%</button>
+                <button className="tool-btn" onClick={expandAll}>＋ 展开层级</button>
+                <button className="tool-btn">⟲ 复位</button>
+              </div>
+              <div className="toolbar-group">
+                <button className="tool-btn">▣ 适配全图</button>
+                <button className="tool-btn">◔ 隐藏职级</button>
+                <button className="tool-btn">⇅ 隐藏序列</button>
+                <button className="tool-btn">🖼 导出PNG</button>
+                <button className="tool-btn">🔗 分享链接</button>
+                <button className="tool-btn primary-lite">重置默认</button>
+              </div>
+            </section>
 
             <section className="summary-grid compact-summary">
               <article className="summary-card"><span>项目数量</span><strong>{portfolioSummary.projectCount}</strong></article>
@@ -85,22 +100,8 @@ export default function App() {
               <article className="summary-card"><span>组织节点</span><strong>{countNodes(orgData)}</strong></article>
             </section>
 
-            <section className="sheet-board">
-              <table className="org-table">
-                <thead>
-                  <tr>
-                    <th>组织层级</th>
-                    <th>负责人</th>
-                    <th>人数</th>
-                    <th>职级</th>
-                    <th>序列</th>
-                    <th>角色职责</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <OrgNode node={orgData} collapsedMap={collapsedMap} onToggle={toggleNode} />
-                </tbody>
-              </table>
+            <section className="org-canvas-board">
+              <VerticalOrgChart data={orgData} collapsedMap={collapsedMap} onToggle={toggleNode} />
             </section>
           </section>
         )}
